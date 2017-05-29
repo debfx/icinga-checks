@@ -1,0 +1,125 @@
+#!/usr/bin/python3
+
+# Checks if there are processes that are unconfined but have an AppArmor
+# profile defined.
+
+# ------------------------------------------------------------------
+#
+#    Copyright (C) 2005-2006 Novell/SUSE
+#    Copyright (C) 2011 Canonical Ltd.
+#    Copyright (C) 2014 Felix Geyer <debfx@fobos.de>
+#
+#    This program is free software; you can redistribute it and/or
+#    modify it under the terms of version 2 of the GNU General Public
+#    License published by the Free Software Foundation.
+#
+# ------------------------------------------------------------------
+
+import apparmor.common
+import os
+import os.path
+import re
+import sys
+
+def errormsg(msg):
+    print('APPARMOR UNKNOWN - ' + msg)
+    sys.exit(3)
+
+def find_apparmorfs():
+    '''Finds AppArmor mount point'''
+    for p in open("/proc/mounts").readlines():
+        if p.split()[2] == "securityfs" and \
+           os.path.exists(os.path.join(p.split()[1], "apparmor")):
+            return os.path.join(p.split()[1], "apparmor")
+    return False
+
+def matchliteral(aa_regexp, literal):
+    p_regexp = '^' + apparmor.common.convert_regexp(aa_regexp) + '$'
+    match = False
+    try:
+        match = re.search(p_regexp, literal)
+    except:
+        return None
+    return match
+
+def get_profile(exe, cmdline, profiles):
+    for profile in profiles:
+        if matchliteral(profile, exe):
+            return profile
+
+    # check for scripts run by an interpreter
+    args = cmdline.split("\0")
+    if len(args) >= 2 and args[0] in ("/bin/sh", "/bin/bash", "/usr/bin/perl", "/usr/bin/python", "/usr/bin/python3", "/usr/bin/php"):
+        for arg in args[1:]:
+            if arg.startswith("/") and os.path.exists(arg):
+                for profile in profiles:
+                    if matchliteral(profile, arg):
+                        return profile
+
+    return None
+
+def get_profiles():
+    '''Fetch loaded profiles'''
+
+    profiles = {}
+
+    if not os.path.exists("/sys/module/apparmor"):
+        errormsg("apparmor module is not loaded.")
+
+    apparmorfs = find_apparmorfs()
+    if not apparmorfs:
+        errormsg("apparmor filesystem is not mounted.")
+
+    apparmor_profiles = os.path.join(apparmorfs, "profiles")
+    if not os.access(apparmor_profiles, os.R_OK):
+        errormsg("You do not have enough privilege to read the profile set.")
+
+    for p in open(apparmor_profiles).readlines():
+        match = re.search("^([^\(]+)\s+\((\w+)\)$", p)
+        profiles[match.group(1)] = match.group(2)
+
+    return profiles
+
+def get_processes(profiles):
+    '''Fetch process list'''
+    processes = {}
+    contents = os.listdir("/proc")
+    for filename in contents:
+        if filename.isdigit():
+            try:
+                for p in open("/proc/%s/attr/current" % filename).readlines():
+                    match = re.search("^([^\(]+)\s+\((\w+)\)$", p)
+                    if match:
+                        processes[filename] = { 'profile' : match.group(1), \
+                                                'mode' : match.group(2) }
+                    else:
+                        cmdline = open("/proc/%s/cmdline" % filename).read()
+                        profile = get_profile(os.path.realpath("/proc/%s/exe" % filename), cmdline, profiles)
+                        if profile:
+                            processes[filename] = { 'profile' : profile, \
+                                                    'mode' : 'unconfined' }
+            except FileNotFoundError:
+                pass
+    return processes
+
+def filter_processes(processes, status):
+    '''Return a list of processes that have a particular status'''
+    filtered = []
+    for key, value in list(processes.items()):
+        if value['mode'] == status:
+            filtered.append([key, value['profile']])
+    return filtered
+
+profiles = get_profiles()
+processes = get_processes(profiles)
+filtered_processes = filter_processes(processes, "unconfined")
+num_unconfined = len(filtered_processes)
+
+if num_unconfined != 0:
+    print('APPARMOR WARNING - {} process(es) are unconfined but have a profile defined'.format(num_unconfined))
+    for proc in filtered_processes:
+        print('{} ({})'.format(proc[1], proc[0]))
+    sys.exit(1)
+else:
+    print('APPARMOR OK - 0 processes are unconfined but have a profile defined')
+    sys.exit(0)

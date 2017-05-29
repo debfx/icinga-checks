@@ -1,0 +1,99 @@
+#!/usr/bin/python3
+
+# Nagios/Icinga plugin for checking the number of threads.
+#
+# Copyright (C) 2016 Felix Geyer <debfx@fobos.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 or (at your option)
+# version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
+import os
+import os.path
+import pwd
+import sys
+
+parser = argparse.ArgumentParser(description='Check the number of running threads.')
+parser.add_argument('-w', '--warning', dest='warning', type=int)
+parser.add_argument('-c', '--critical', dest='critical', type=int)
+parser.add_argument('-u', '--user', dest='user')
+parser.add_argument('-a', '--argument-array', dest='argument')
+parser.add_argument('-C', '--command', dest='command')
+parser.add_argument('-k', '--no-kthreads', dest='kernelthreads', action='store_false')
+
+args = parser.parse_args()
+
+pids = []
+
+for pid in os.listdir('/proc/'):
+    path = '/proc/' + pid + '/'
+
+    if not pid.isdigit() or not os.path.isdir(path):
+        continue
+
+    pidentry = {}
+
+    cmdline = open(path + 'cmdline', 'r').read()
+
+    stat = os.stat(path)
+    pidentry['uid'] = stat.st_uid
+    pidentry['gid'] = stat.st_gid
+
+    for line in open(path + 'status', 'r'):
+        if line.startswith('Threads:'):
+            pidentry['threads'] = int(line[9:])
+
+    pidentry['cmdline'] = cmdline.strip('\x00').replace('\x00', " ")
+    pidentry['kernel'] = (not cmdline)
+    try:
+        pidentry['exe'] = os.readlink(path + 'exe')
+    #except PermissionError: python > 3.2
+    except OSError:
+        pass
+
+    pids.append(pidentry)
+
+if args.user:
+    if not args.user.isdigit():
+        uid = pwd.getpwnam(args.user).pw_uid
+    else:
+        uid = int(args.user)
+else:
+    uid = None
+
+num_threads = 0
+
+for p in pids:
+    if uid and p['uid'] != uid:
+        continue
+
+    if args.argument and not (args.argument in p['cmdline']):
+        continue
+
+    if args.command and p['exe'] != args.command:
+        continue
+
+    if not args.kernelthreads and p['kernel']:
+        continue
+
+    num_threads += p['threads']
+
+if args.critical and num_threads >= args.critical:
+    print('THREADS CRITICAL - {} threads'.format(num_threads))
+    sys.exit(2)
+elif args.warning and num_threads >= args.warning:
+    print('THREADS WARNING - {} threads'.format(num_threads))
+    sys.exit(1)
+else:
+    print('THREADS OK - {} threads'.format(num_threads))
+    sys.exit(0)

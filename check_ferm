@@ -1,0 +1,116 @@
+#!/usr/bin/python3
+
+# Checks if the ferm config on disk has been loaded into iptables by
+# comparing the chain policies and number of loaded rules.
+#
+# It can't compare the actual content of the rules.
+#
+# Copyright (C) 2015 Felix Geyer <debfx@fobos.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 or (at your option)
+# version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import re
+import subprocess
+import sys
+
+FERM_CONFIG = "/etc/ferm/ferm.conf"
+
+def get_ferm_rules(config, domain):
+    return subprocess.check_output(["ferm", "--noexec", "--shell", "--domain", domain, config],
+                                   universal_newlines=True)
+
+def get_iptables_rules(domain):
+    if domain == "ip":
+        return subprocess.check_output(["iptables-save"], universal_newlines=True)
+    else:
+        return subprocess.check_output(["ip6tables-save"], universal_newlines=True)
+
+def count_rules(data):
+    counter = 0
+
+    for line in data.splitlines():
+        if line.startswith("-A"):
+            counter += 1
+
+    return counter
+
+def get_policy(table, data):
+    in_filter = False
+    for line in data.splitlines():
+        if line.startswith("*"):
+            in_filter = line.startswith("*filter")
+            continue
+
+        if in_filter:
+            match = re.search(r'^:{} ([A-Z]+)'.format(re.escape(table)), line)
+            if match:
+                return match.group(1)
+
+    return "UNKNOWN"
+
+
+try:
+    ferm_ip = get_ferm_rules(FERM_CONFIG, "ip")
+    ferm_ip6 = get_ferm_rules(FERM_CONFIG, "ip6")
+except subprocess.CalledProcessError:
+    print("FERM CRITICAL - unable to load ferm rules")
+    sys.exit(2)
+
+try:
+    loaded_ip = get_iptables_rules("ip")
+    loaded_ip6 = get_iptables_rules("ip6")
+except subprocess.CalledProcessError:
+    print("FERM UNKNOWN - unable to get active rules")
+    sys.exit(3)
+
+policy = {}
+policy["IPv4 INPUT"] = get_policy("INPUT", loaded_ip)
+policy["IPv4 FORWARD"] = get_policy("FORWARD", loaded_ip)
+policy["IPv6 INPUT"] = get_policy("INPUT", loaded_ip6)
+policy["IPv6 FORWARD"] = get_policy("FORWARD", loaded_ip6)
+
+for descr, policy in policy.items():
+    if policy == "DROP":
+        continue
+    elif policy == "UNKNOWN":
+        print("FERM UNKNOWN - policy for {} is unknown".format(descr))
+        sys.exit(3)
+    else:
+        print("FERM WARNING - policy for {} is {}".format(descr, policy))
+        sys.exit(1)
+
+count_loaded_ip = count_rules(loaded_ip)
+count_loaded_ip6 = count_rules(loaded_ip6)
+
+count_ferm_ip = count_rules(ferm_ip)
+count_ferm_ip6 = count_rules(ferm_ip6)
+
+if count_ferm_ip != count_loaded_ip:
+    print("FERM WARNING - ferm config doesn't match loaded IPv4 rules")
+    sys.exit(1)
+
+if count_ferm_ip6 != count_loaded_ip6:
+    print("FERM WARNING - ferm config doesn't match loaded IPv6 rules")
+    sys.exit(1)
+
+if count_ferm_ip == 0:
+    print("FERM WARNING - no IPv4 rules configured")
+    sys.exit(1)
+
+if count_ferm_ip6 == 0:
+    print("FERM WARNING - no IPv6 rules configured")
+    sys.exit(1)
+
+print("FERM OK - {} IPv4 and {} IPv6 rules active".format(count_loaded_ip, count_loaded_ip6))
+sys.exit(0)

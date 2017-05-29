@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+
+# Nagios/Icinga plugin for checking memory usage.
+#
+# Copyright (C) 2016 Felix Geyer <debfx@fobos.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 or (at your option)
+# version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
+import os
+import re
+import subprocess
+import sys
+
+def nagios_ok(msg):
+    print("MEMORY OK - " + msg)
+    sys.exit(0)
+
+def nagios_warning(msg):
+    print("MEMORY WARNING - " + msg)
+    sys.exit(1)
+
+def nagios_critical(msg):
+    print("MEMORY CRITICAL - " + msg)
+    sys.exit(2)
+
+def nagios_unknown(msg):
+    print("MEMORY UNKONWN - " + msg)
+    sys.exit(3)
+
+def parse_meminfo():
+    result = {}
+
+    f = open("/proc/meminfo")
+    for line in f.readlines():
+        match = re.match(r"^MemTotal:\s+(\d+) kB", line)
+        if match:
+            result["mem_total"] = int(match.group(1)) * 1024
+            continue
+
+        match = re.match(r"^MemAvailable:\s+(\d+) kB", line)
+        if match:
+            result["mem_available"] = int(match.group(1)) * 1024
+            continue
+
+    return result
+
+def parse_free():
+    result = {}
+
+    env_c = dict(os.environ)
+    env_c["LC_ALL"] = "C"
+
+    output = subprocess.check_output(["free", "-b"], universal_newlines=True, env=env_c)
+    for line in output.splitlines():
+        match = re.search(r"^Mem:\s+(\d+)\s+", line)
+        if match:
+            result["mem_total"] = int(match.group(1))
+            continue
+
+        match = re.search(r"^\-/\+ buffers/cache:\s+(\d+)\s+", line)
+        if match:
+            result["mem_used"] = int(match.group(1))
+            continue
+
+    return result
+
+def get_threshold(string, memory_total):
+    if not string:
+        return None
+
+    if re.search(r"^\d+$", string):
+        return int(string)
+    elif re.search(r"^\d+%$", string):
+        return int(int(string[:-1]) / 100 * memory_total)
+    else:
+        raise ValueError()
+
+def main():
+    parser = argparse.ArgumentParser(description="Nagios/Icinga plugin for checking memory usage.")
+    parser.add_argument("--warning", "-w", help="Warning threshold (in bytes or percent) for free memory.")
+    parser.add_argument("--critical", "-c", help="Critical threshold (in bytes or percent) for free memory.")
+    parser.add_argument("--unit", "-u",
+                        choices=["b", "K", "M", "G"],
+                        default="M",
+                        help="Unit to use for human-redeable output. Can be 'b', 'K' 'M' or 'G' for bytes, KiB, MiB or GiB respectively")
+    args = parser.parse_args()
+
+    meminfo = parse_meminfo()
+    if "mem_total" in meminfo and "mem_available" in meminfo:
+        memory_total = meminfo["mem_total"]
+        memory_free = meminfo["mem_available"]
+    else:
+        free = parse_free()
+        if "mem_total" in free and "mem_used" in free:
+            memory_total = free["mem_total"]
+            memory_free = free["mem_total"] - free["mem_used"]
+        else:
+            nagios_unknown("Unable to read /proc/meminfo or `free`")
+
+    if args.unit == "b":
+        unit_factor = 1
+    elif args.unit == "K":
+        unit_factor = 1024
+    elif args.unit == "M":
+        unit_factor = 1024 * 1024
+    elif args.unit == "G":
+        unit_factor = 1024 * 1024 * 1024
+
+    warning = get_threshold(args.warning, memory_total)
+    critical = get_threshold(args.critical, memory_total)
+
+    if warning:
+        warning_str = warning
+    else:
+        warning_str = ""
+
+    if critical:
+        critical_str = critical
+    else:
+        critical_str = ""
+
+    status_line = "{}{} free | free={}b;{};{}".format(int(memory_free / unit_factor), args.unit, memory_free, warning_str, critical_str)
+
+    if critical and memory_free < critical:
+        nagios_critical(status_line)
+    elif warning and memory_free < warning:
+        nagios_warning(status_line)
+    else:
+        nagios_ok(status_line)
+
+if __name__ == "__main__":
+    main()
+
+# kate: space-indent on; indent-width 4;
