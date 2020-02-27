@@ -106,5 +106,5 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as e:
-        print('LIBS UNKNOWN - Exception:', e)
+        print('LIBS UNKNOWN - Exception {}: {}'.format(type(e).__name__, e))
         exit(UNKNOWN)
