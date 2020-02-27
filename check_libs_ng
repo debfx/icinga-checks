@@ -71,16 +71,24 @@ def main():
             os.chdir(os.path.join(proc, 'map_files'))
             for map_file in os.listdir('.'):
                 # all files in /map_files/ are absolute symlinks, so we don't need abspath()
-                real_map_file_path = os.path.realpath(map_file).replace(' (deleted)', '')
+                try:
+                    real_map_file_path = os.path.realpath(map_file).replace(' (deleted)', '')
+                except OSError:
+                    # just skip if the file doesn't exist anymore
+                    continue
                 if '.so' not in real_map_file_path or real_map_file_path.startswith('/tmp'):
                     logger.debug('skipping non-lib %s', real_map_file_path)
                     continue
 
-                if os.stat(map_file).st_nlink == 0:
-                    needs_reload.setdefault(proc_name, set()).add(proc_pid)
-                    logger.info('lib %s has been updated/deleted', real_map_file_path)
-                else:
-                    logger.debug('lib %s hasn\'t been changed', real_map_file_path)
+                try:
+                    if os.stat(map_file).st_nlink == 0:
+                        needs_reload.setdefault(proc_name, set()).add(proc_pid)
+                        logger.info('lib %s has been updated/deleted', real_map_file_path)
+                    else:
+                        logger.debug('lib %s hasn\'t been changed', real_map_file_path)
+                except OSError:
+                    # just skip if the file doesn't exist anymore
+                    continue
         else:
             logger.debug('skipping kernel process %s', os.path.basename(proc))
 
