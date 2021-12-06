@@ -21,17 +21,16 @@ import os
 import subprocess
 import sys
 
-
-RESULT_OK       = 0
-RESULT_WARNING  = 1
+RESULT_OK = 0
+RESULT_WARNING = 1
 RESULT_CRITICAL = 2
-RESULT_UNKNOWN  = 3
+RESULT_UNKNOWN = 3
 
 RESULT_STRING = {
-    RESULT_OK:       "OK",
-    RESULT_WARNING:  "WARNING",
+    RESULT_OK: "OK",
+    RESULT_WARNING: "WARNING",
     RESULT_CRITICAL: "CRITICAL",
-    RESULT_UNKNOWN:  "UNKNOWN",
+    RESULT_UNKNOWN: "UNKNOWN",
 }
 
 
@@ -67,7 +66,7 @@ def parse_properties(lines):
     for line in lines:
         pos = line.find("=")
         if pos > 0:
-            properties[line[:pos]] = line[pos+1:]
+            properties[line[:pos]] = line[pos + 1 :]
 
     return properties
 
@@ -90,7 +89,6 @@ def check_service_status(unit):
         check_result = [RESULT_UNKNOWN, "{} unknown\n\n{}".format(unit, active_result[1])]
 
     return check_result
-
 
 
 def main():
