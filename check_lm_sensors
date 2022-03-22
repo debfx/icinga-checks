@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+
+# Copyright (C) 2022 Felix Geyer <debfx@fobos.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 or (at your option)
+# version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
+import json
+import subprocess
+import sys
+from enum import Enum
+from typing import Dict, NoReturn, Optional, Tuple
+
+
+class NagiosStatus(Enum):
+    OK = 0
+    WARNING = 1
+    CRITICAL = 2
+    UNKNOWN = 3
+
+
+def nagios_exit(
+    status: NagiosStatus,
+    msg: str,
+    performance_data: Optional[Dict[str, float]] = None,
+) -> NoReturn:
+    if msg:
+        lines = msg.splitlines()
+    else:
+        lines = [""]
+    status_text = f"LM_SENSORS {status.name} - {lines[0]}"
+    if performance_data:
+        status_text += " | "
+        status_text += ", ".join([f"{name}={value}" for name, value in performance_data.items()])
+
+    print(status_text)
+    if len(lines) > 1:
+        print("\n".join(lines[1:]))
+    sys.exit(status.value)
+
+
+def read_sensors() -> Dict[str, float]:
+    proc = subprocess.run(["sensors", "-j", "-A"], capture_output=True, text=True, check=True)
+    data = json.loads(proc.stdout)
+    result = {}
+    for chip_name, sensors in data.items():
+        for sensor_name, sensor_values in sensors.items():
+            sensor_value = None
+            for key, value in sensor_values.items():
+                if key.endswith("_input"):
+                    sensor_value = value
+            if sensor_value is not None:
+                measurement_name = f"{chip_name}_{sensor_name}".replace(" ", "_").replace("=", "_")
+                result[measurement_name] = sensor_value
+    return result
+
+
+def parse_check_value(check_value: str) -> Tuple[str, float, float]:
+    name, threshold = check_value.split("=", maxsplit=1)
+    warning, critical = threshold.split(",", maxsplit=1)
+    return name, float(warning), float(critical)
+
+
+def main() -> NoReturn:
+    parser = argparse.ArgumentParser(description="Icinga plugin for checking lm-sensors data.")
+    parser.add_argument("--list", action="store_true", help="List all available sensors instead of checking.")
+    parser.add_argument(
+        "--low",
+        action="append",
+        help="Specifies a check for a sensor value which is too low.\nFormat: --low SENSOR_NAME=WARNING,CRITICAL",
+    )
+    parser.add_argument(
+        "--high",
+        action="append",
+        help="Specifies a check for a sensor value which is too high.\nFormat: --high SENSOR_NAME=WARNING,CRITICAL",
+    )
+    args = parser.parse_args()
+
+    try:
+        measurements = read_sensors()
+    except subprocess.CalledProcessError:
+        nagios_exit(NagiosStatus.UNKNOWN, "failed to read sensors")
+
+    if args.list:
+        for key, value in measurements.items():
+            print(f"{key}: {value}")
+        sys.exit(0)
+
+    if not args.low and not args.high:
+        nagios_exit(NagiosStatus.UNKNOWN, "missing argument --low or --high")
+
+    performance_data = {}
+    warnings = []
+    criticals = []
+
+    if args.low:
+        for low in args.low:
+            name, warning, critical = parse_check_value(low)
+            if warning < critical:
+                nagios_exit(NagiosStatus.UNKNOWN, f"critical has to be <= warning in --low {name}")
+            if name not in measurements:
+                nagios_exit(NagiosStatus.UNKNOWN, f"sensor {name} not found")
+            value = measurements[name]
+            performance_data[name] = value
+            if value <= critical:
+                criticals.append(f"sensor {name}: {value} <= {critical}")
+            elif value <= warning:
+                warnings.append(f"sensor {name}: {value} <= {warning}")
+
+    if args.high:
+        for high in args.high:
+            name, warning, critical = parse_check_value(high)
+            if warning > critical:
+                nagios_exit(NagiosStatus.UNKNOWN, f"critical has to be >= warning in --high {name}")
+            if name not in measurements:
+                nagios_exit(NagiosStatus.UNKNOWN, f"sensor {name} not found")
+            value = measurements[name]
+            performance_data[name] = value
+            if value >= critical:
+                criticals.append(f"sensor {name}: {value} >= {critical}")
+            elif value >= warning:
+                warnings.append(f"sensor {name}: {value} >= {warning}")
+
+    message = "\n".join(criticals + warnings)
+    if criticals:
+        status = NagiosStatus.CRITICAL
+    elif warnings:
+        status = NagiosStatus.WARNING
+    else:
+        status = NagiosStatus.OK
+
+    nagios_exit(status, message, performance_data)
+
+
+if __name__ == "__main__":
+    main()
