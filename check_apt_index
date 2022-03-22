@@ -1,0 +1,39 @@
+#!/bin/sh
+
+# checks that the APT package index is up-to-date without errors
+
+# Since there seems to be no way to check the last successful apt-get update
+# run, we just fetch the index.
+# /var/lib/apt/periodic/update-stamp is always updated by the apt-daily timer,
+# even on errors.
+
+# Copyright (C) 2022 Felix Geyer <debfx@fobos.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 or (at your option)
+# version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+set -u
+
+# even with --error-on=any apt-get doesn't return an error exit code
+# on warnings (e.g. when a suite doesn't exist)
+APT_UPDATE_OUT="$(apt-get update -qq --error-on=any 2>&1)"
+APT_UPDATE_RC=$?
+
+if [ $APT_UPDATE_RC -ne 0 ] || echo "$APT_UPDATE_OUT" | grep -q '^[WE]:'; then
+  echo "APT_INDEX WARNING - errors while refreshing APT index"
+  echo
+  echo "$APT_UPDATE_OUT"
+  exit 1
+else
+  echo "APT_INDEX OK"
+fi
