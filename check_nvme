@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+
+# Copyright (C) 2022 Felix Geyer <debfx@fobos.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 or (at your option)
+# version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
+import re
+import subprocess
+import sys
+from enum import Enum
+from typing import NoReturn
+
+
+class NagiosStatus(Enum):
+    OK = 0
+    WARNING = 1
+    CRITICAL = 2
+    UNKNOWN = 3
+
+
+def nagios_exit(status: NagiosStatus, msg: str) -> NoReturn:
+    print(f"NVME {status.name} - {msg}")
+    sys.exit(status.value)
+
+
+def main() -> NoReturn:
+    parser = argparse.ArgumentParser(description="Icinga plugin for checking NVMe disks.")
+    parser.add_argument(
+        "--warning-spare",
+        type=int,
+        default=50,
+        help="Warning threshold for percent of available spares.",
+    )
+    parser.add_argument(
+        "--critical-spare",
+        type=int,
+        default=10,
+        help="Critical threshold for percent of available spares.",
+    )
+    parser.add_argument("disk", help="Path of device that is checked.")
+    args = parser.parse_args()
+
+    proc = subprocess.run(["nvme", "smart-log", args.disk], capture_output=True, text=True)
+
+    if proc.returncode != 0:
+        nagios_exit(NagiosStatus.UNKNOWN, f"nvme smart-log exited with status code {proc.returncode}")
+
+    if args.warning_spare < args.critical_spare:
+        nagios_exit(
+            NagiosStatus.UNKNOWN,
+            "--warning-spare has to be larger or equal to --critical-spare",
+        )
+
+    critical_warning = None
+    available_spare = None
+    media_errors = None
+    for line in proc.stdout.splitlines():
+        match = re.search(r"critical_warning\s*:\s*(\d+)", line)
+        if match:
+            critical_warning = int(match.group(1))
+            continue
+
+        match = re.search(r"available_spare\s*:\s*(\d+)%", line)
+        if match:
+            available_spare = int(match.group(1))
+            continue
+
+        match = re.search(r"media_errors\s*:\s*(\d+)", line)
+        if match:
+            media_errors = int(match.group(1))
+            continue
+
+    if critical_warning is None:
+        nagios_exit(NagiosStatus.UNKNOWN, "critical_warning value not found")
+
+    if available_spare is None:
+        nagios_exit(NagiosStatus.UNKNOWN, "available_spare value not found")
+
+    if media_errors is None:
+        nagios_exit(NagiosStatus.UNKNOWN, "media_errors value not found")
+
+    if critical_warning > 0:
+        nagios_exit(
+            NagiosStatus.CRITICAL,
+            f"{args.disk} has critical warning ({critical_warning})",
+        )
+
+    if media_errors > 0:
+        nagios_exit(NagiosStatus.CRITICAL, f"{args.disk} has media errors ({media_errors})")
+
+    if available_spare <= args.critical_spare:
+        nagios_exit(
+            NagiosStatus.CRITICAL,
+            f"{args.disk} has not enough spare sectors ({available_spare})",
+        )
+
+    if available_spare <= args.warning_spare:
+        nagios_exit(
+            NagiosStatus.WARNING,
+            f"{args.disk} has not enough spare sectors ({available_spare})",
+        )
+
+    nagios_exit(NagiosStatus.OK, f"{args.disk} is healthy")
+
+
+if __name__ == "__main__":
+    main()
