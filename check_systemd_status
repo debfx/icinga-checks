@@ -77,7 +77,10 @@ def check_service_status(unit, check_running):
     properties = parse_properties(active_result[1].splitlines())
 
     if active_result[0] == 0 and "ActiveState" in properties and "SubState" in properties:
-        check_result = [RESULT_UNKNOWN, "{} {} ({})".format(unit, properties["ActiveState"], properties["SubState"])]
+        check_result = [
+            RESULT_UNKNOWN,
+            "{} {} ({})".format(unit, properties["ActiveState"], properties["SubState"]),
+        ]
 
         if properties["ActiveState"] == "active" and (not check_running or properties["SubState"] == "running"):
             check_result[0] = RESULT_OK
@@ -87,7 +90,10 @@ def check_service_status(unit, check_running):
             if status_result[1]:
                 check_result[1] += "\n\n" + status_result[1]
     else:
-        check_result = [RESULT_UNKNOWN, "{} unknown\n\n{}".format(unit, active_result[1])]
+        check_result = [
+            RESULT_UNKNOWN,
+            "{} unknown\n\n{}".format(unit, active_result[1]),
+        ]
 
     return check_result
 
@@ -97,11 +103,18 @@ def main():
 
     parser = argparse.ArgumentParser(description="Icinga plugin for checking systemd status.")
     parser.add_argument(
-        "--system", action="store_true", help="Check the system status. Mutually exclusive with --unit."
+        "--system",
+        action="store_true",
+        help="Check the system status. Mutually exclusive with --unit.",
     )
-    parser.add_argument("--unit", help="Check the specific systemd unit. Mutually exclusive with --system.")
     parser.add_argument(
-        "--unit-running", action="store_true", help="Check that the unit is running on top of being active."
+        "--unit",
+        help="Check the specific systemd unit. Mutually exclusive with --system.",
+    )
+    parser.add_argument(
+        "--unit-running",
+        action="store_true",
+        help="Check that the unit is running on top of being active.",
     )
     args = parser.parse_args()
 
@@ -116,7 +129,10 @@ def main():
             else:
                 result = check_service_status(args.unit, args.unit_running)
         except Exception as e:
-            result = (RESULT_UNKNOWN, "Exception {}\n\n{}".format(e.__class__.__name__, e))
+            result = (
+                RESULT_UNKNOWN,
+                "Exception {}\n\n{}".format(e.__class__.__name__, e),
+            )
 
     print("SYSTEMD {}: {}".format(RESULT_STRING.get(result[0], RESULT_STRING[RESULT_UNKNOWN]), result[1]))
     sys.exit(result[0])
