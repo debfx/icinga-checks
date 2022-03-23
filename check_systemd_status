@@ -105,12 +105,13 @@ def main() -> NoReturn:
     os.environ["LC_ALL"] = "C"
 
     parser = argparse.ArgumentParser(description="Icinga plugin for checking systemd status.")
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "--system",
         action="store_true",
         help="Check the system status. Mutually exclusive with --unit.",
     )
-    parser.add_argument(
+    group.add_argument(
         "--unit",
         help="Check the specific systemd unit. Mutually exclusive with --system.",
     )
@@ -121,21 +122,14 @@ def main() -> NoReturn:
     )
     args = parser.parse_args()
 
-    if not args.system and not args.unit:
+    try:
+        if args.system:
+            status, message = check_systemd_status()
+        else:
+            status, message = check_service_status(args.unit, args.unit_running)
+    except Exception as e:
         status = NagiosStatus.UNKNOWN
-        message = "One of --system and --unit is required"
-    elif args.system and args.unit:
-        status = NagiosStatus.UNKNOWN
-        message = "--system and --unit are mutually exclusive"
-    else:
-        try:
-            if args.system:
-                status, message = check_systemd_status()
-            else:
-                status, message = check_service_status(args.unit, args.unit_running)
-        except Exception as e:
-            status = NagiosStatus.UNKNOWN
-            message = f"Exception {e.__class__.__name__}\n\n{e}"
+        message = f"Exception {e.__class__.__name__}\n\n{e}"
 
     nagios_exit(status, message)
 
