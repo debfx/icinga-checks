@@ -131,7 +131,8 @@ def main():
     else:
         critical_str = ""
 
-    status_line = "{}{} free | free={}b;{};{}".format(int(memory_free / unit_factor), args.unit, memory_free, warning_str, critical_str)
+    memory_free_in_unit = int(memory_free / unit_factor)
+    status_line = f"{memory_free_in_unit}{args.unit} free | free={memory_free}b;{warning_str};{critical_str}"
 
     if critical and memory_free < critical:
         nagios_critical(status_line)

@@ -79,7 +79,7 @@ def check_service_status(unit, check_running):
     if active_result[0] == 0 and "ActiveState" in properties and "SubState" in properties:
         check_result = [
             RESULT_UNKNOWN,
-            "{} {} ({})".format(unit, properties["ActiveState"], properties["SubState"]),
+            f"{unit} {properties['ActiveState']} ({properties['SubState']})",
         ]
 
         if properties["ActiveState"] == "active" and (not check_running or properties["SubState"] == "running"):
@@ -92,7 +92,7 @@ def check_service_status(unit, check_running):
     else:
         check_result = [
             RESULT_UNKNOWN,
-            "{} unknown\n\n{}".format(unit, active_result[1]),
+            f"{unit} unknown\n\n{active_result[1]}",
         ]
 
     return check_result
@@ -131,10 +131,10 @@ def main():
         except Exception as e:
             result = (
                 RESULT_UNKNOWN,
-                "Exception {}\n\n{}".format(e.__class__.__name__, e),
+                f"Exception {e.__class__.__name__}\n\n{e}",
             )
 
-    print("SYSTEMD {}: {}".format(RESULT_STRING.get(result[0], RESULT_STRING[RESULT_UNKNOWN]), result[1]))
+    print(f"SYSTEMD {RESULT_STRING.get(result[0], RESULT_STRING[RESULT_UNKNOWN])}: {result[1]}")
     sys.exit(result[0])
 
 
