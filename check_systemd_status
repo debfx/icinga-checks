@@ -21,18 +21,23 @@ import argparse
 import os
 import subprocess
 import sys
+from enum import Enum
+from typing import NoReturn
 
-RESULT_OK = 0
-RESULT_WARNING = 1
-RESULT_CRITICAL = 2
-RESULT_UNKNOWN = 3
 
-RESULT_STRING = {
-    RESULT_OK: "OK",
-    RESULT_WARNING: "WARNING",
-    RESULT_CRITICAL: "CRITICAL",
-    RESULT_UNKNOWN: "UNKNOWN",
-}
+class NagiosStatus(Enum):
+    OK = 0
+    WARNING = 1
+    CRITICAL = 2
+    UNKNOWN = 3
+
+
+CHECK_NAME = "SYSTEMD"
+
+
+def nagios_exit(status: NagiosStatus, msg: str) -> NoReturn:
+    print(f"{CHECK_NAME} {status.name} - {msg}")
+    sys.exit(status.value)
 
 
 def run_process(cmd):
@@ -44,21 +49,22 @@ def run_process(cmd):
 
 
 def check_systemd_status():
-    status_result = run_process(["systemctl", "is-system-running"])
+    system_running_result = run_process(["systemctl", "is-system-running"])
 
-    check_result = [RESULT_UNKNOWN, status_result[1]]
+    status = NagiosStatus.UNKNOWN
+    message = system_running_result[1]
 
-    if status_result[0] != 0:
-        check_result[0] = RESULT_WARNING
+    if system_running_result[0] != 0:
+        status = NagiosStatus.WARNING
 
-        if status_result[1] == "degraded":
+        if system_running_result[1] == "degraded":
             failed_output = run_process(["systemctl", "list-units", "--state=failed"])
             if failed_output[1]:
-                check_result[1] += "\n\n" + failed_output[1]
+                message += "\n\n" + failed_output[1]
     else:
-        check_result[0] = RESULT_OK
+        status = NagiosStatus.OK
 
-    return check_result
+    return status, message
 
 
 def parse_properties(lines):
@@ -73,29 +79,26 @@ def parse_properties(lines):
 
 
 def check_service_status(unit, check_running):
-    active_result = run_process(["systemctl", "show", "-p", "ActiveState,SubState", unit])
-    properties = parse_properties(active_result[1].splitlines())
+    unit_state_result = run_process(["systemctl", "show", "-p", "ActiveState,SubState", unit])
+    properties = parse_properties(unit_state_result[1].splitlines())
+    status = NagiosStatus.UNKNOWN
+    message = ""
 
-    if active_result[0] == 0 and "ActiveState" in properties and "SubState" in properties:
-        check_result = [
-            RESULT_UNKNOWN,
-            f"{unit} {properties['ActiveState']} ({properties['SubState']})",
-        ]
+    if unit_state_result[0] == 0 and "ActiveState" in properties and "SubState" in properties:
+        message = f"{unit} {properties['ActiveState']} ({properties['SubState']})"
 
         if properties["ActiveState"] == "active" and (not check_running or properties["SubState"] == "running"):
-            check_result[0] = RESULT_OK
+            status = NagiosStatus.OK
         else:
-            check_result[0] = RESULT_CRITICAL
-            status_result = run_process(["systemctl", "status", unit])
-            if status_result[1]:
-                check_result[1] += "\n\n" + status_result[1]
+            status = NagiosStatus.CRITICAL
+            unit_status_result = run_process(["systemctl", "status", unit])
+            if unit_status_result[1]:
+                message += "\n\n" + unit_status_result[1]
     else:
-        check_result = [
-            RESULT_UNKNOWN,
-            f"{unit} unknown\n\n{active_result[1]}",
-        ]
+        status = NagiosStatus.UNKNOWN
+        message = f"{unit} unknown\n\n{unit_state_result[1]}"
 
-    return check_result
+    return status, message
 
 
 def main():
@@ -119,23 +122,22 @@ def main():
     args = parser.parse_args()
 
     if not args.system and not args.unit:
-        result = (RESULT_UNKNOWN, "One of --system and --unit is required")
+        status = NagiosStatus.UNKNOWN
+        message = "One of --system and --unit is required"
     elif args.system and args.unit:
-        result = (RESULT_UNKNOWN, "--system and --unit are mutually exclusive")
+        status = NagiosStatus.UNKNOWN
+        message = "--system and --unit are mutually exclusive"
     else:
         try:
             if args.system:
-                result = check_systemd_status()
+                status, message = check_systemd_status()
             else:
-                result = check_service_status(args.unit, args.unit_running)
+                status, message = check_service_status(args.unit, args.unit_running)
         except Exception as e:
-            result = (
-                RESULT_UNKNOWN,
-                f"Exception {e.__class__.__name__}\n\n{e}",
-            )
+            status = NagiosStatus.UNKNOWN
+            message = f"Exception {e.__class__.__name__}\n\n{e}"
 
-    print(f"SYSTEMD {RESULT_STRING.get(result[0], RESULT_STRING[RESULT_UNKNOWN])}: {result[1]}")
-    sys.exit(result[0])
+    nagios_exit(status, message)
 
 
 if __name__ == "__main__":
