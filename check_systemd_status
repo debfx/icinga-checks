@@ -42,7 +42,7 @@ def nagios_exit(status: NagiosStatus, msg: str) -> NoReturn:
 
 def run_process(cmd: List[str]) -> Tuple[int, str]:
     try:
-        output = subprocess.check_output(cmd, universal_newlines=True)
+        output = subprocess.check_output(cmd, universal_newlines=True, stderr=subprocess.STDOUT)
         return (0, output.strip())
     except subprocess.CalledProcessError as e:
         return (e.returncode, e.output.strip())
