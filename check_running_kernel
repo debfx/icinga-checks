@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+
+# Icinga plugin for checking the running kernel against the latest installed version.
+#
+# Copyright (C) 2022 Felix Geyer <debfx@fobos.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 or (at your option)
+# version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import apt
+import apt_pkg
+import re
+import sys
+from enum import Enum
+
+
+CHECK_NAME = "RUNNING KERNEL"
+KERNEL_PACKAGE_PREFIX = "linux-image-"
+
+
+class NagiosStatus(Enum):
+    OK = 0
+    WARNING = 1
+    CRITICAL = 2
+    UNKNOWN = 3
+
+
+def nagios_exit(status: NagiosStatus, msg: str):
+    print(f"{CHECK_NAME} {status.name} - {msg}")
+    sys.exit(status.value)
+
+
+# backported platform.freedesktop_os_release() from Python 3.10
+
+_os_release_line = re.compile("^(?P<name>[a-zA-Z0-9_]+)=(?P<quote>[\"']?)(?P<value>.*)(?P=quote)$")
+# unescape five special characters mentioned in the standard
+_os_release_unescape = re.compile(r"\\([\\\$\"\'`])")
+# /etc takes precedence over /usr/lib
+_os_release_candidates = ("/etc/os-release", "/usr/lib/os-release")
+
+
+def _parse_os_release(lines):
+    # These fields are mandatory fields with well-known defaults
+    # in practice all Linux distributions override NAME, ID, and PRETTY_NAME.
+    info = {
+        "NAME": "Linux",
+        "ID": "linux",
+        "PRETTY_NAME": "Linux",
+    }
+
+    for line in lines:
+        mo = _os_release_line.match(line)
+        if mo is not None:
+            info[mo.group("name")] = _os_release_unescape.sub(r"\1", mo.group("value"))
+
+    return info
+
+
+def freedesktop_os_release():
+    """Return operation system identification from freedesktop.org os-release"""
+    errno = None
+    for candidate in _os_release_candidates:
+        try:
+            with open(candidate, encoding="utf-8") as f:
+                os_release = _parse_os_release(f)
+            break
+        except OSError as e:
+            errno = e.errno
+    else:
+        raise OSError(errno, f"Unable to read files {', '.join(_os_release_candidates)}")
+
+    return os_release
+
+
+def read_file(path):
+    with open(path) as f_path:
+        return f_path.read().strip()
+
+
+def check_debian():
+    """
+    On Debian the package name only encodes the ABI version.
+    We need to parse the exact version from /proc/sys/kernel/version
+    """
+    running_osrelease = read_file("/proc/sys/kernel/osrelease")
+    running_version_full = read_file("/proc/sys/kernel/version")
+    match = re.search(r"(\d+\.\d+(\.\d+)?-\d+)", running_version_full)
+    if match:
+        running_version = match.group(1)
+    else:
+        return NagiosStatus.UNKNOWN, f'failed to parse version from kernel version string: "{running_version_full}"'
+
+    kernel_variant = re.sub(r"^\d+\.\d+(\.\d+)?-[A-Za-z0-9\.]+-", "", running_osrelease)
+    if kernel_variant == running_osrelease:
+        return NagiosStatus.UNKNOWN, f'failed to parse kernel variant from kernel osrelease: "{running_osrelease}"'
+    metapackage_name = KERNEL_PACKAGE_PREFIX + kernel_variant
+
+    cache = apt.Cache()
+    if metapackage_name not in cache or not cache[metapackage_name].installed:
+        return NagiosStatus.UNKNOWN, f"kernel meta package not installed: {metapackage_name}"
+
+    latest_osrelease = None
+    latest_version = None
+
+    metapackage_installed = cache[metapackage_name].installed
+    for dependency in metapackage_installed.get_dependencies("Depends"):
+        for base_dependency in dependency.or_dependencies:
+            if base_dependency.name.startswith(KERNEL_PACKAGE_PREFIX):
+                latest_osrelease = re.sub(KERNEL_PACKAGE_PREFIX, "", base_dependency.name)
+                latest_version = cache[base_dependency.name].candidate.version
+                break
+
+    if latest_osrelease is None or latest_version is None:
+        return NagiosStatus.UNKNOWN, "failed to find kernel image package in {metapackage_name} dependencies"
+
+    if running_osrelease != latest_osrelease or running_version != latest_version:
+        message = "running kernel doesn't match the latest installed version\n\n"
+        message += f"running: {running_osrelease} - {running_version}\n"
+        message += f"installed: {latest_osrelease} - {latest_version}"
+        return NagiosStatus.WARNING, message
+
+    message = "running kernel matches installed version\n\n"
+    message += f"version: {running_osrelease} - {running_version}"
+    return NagiosStatus.OK, message
+
+
+def check_ubuntu():
+    """
+    On Ubuntu each kernel version has its own package name.
+    There can be multiple meta packages, for example:
+    linux-image-generic, linux-image-generic-hwe-18.04, linux-image-generic-hwe-18.04-edge
+    """
+    running_osrelease = read_file("/proc/sys/kernel/osrelease")
+
+    kernel_variant = re.sub(r"^\d+\.\d+(\.\d+)?-[A-Za-z0-9\.]+-", "", running_osrelease)
+    metapackage_name = KERNEL_PACKAGE_PREFIX + kernel_variant
+    metapackage_version = "0"
+
+    latest_osrelease = None
+
+    cache = apt.Cache()
+    for pkg in cache:
+        if pkg.name == metapackage_name or pkg.name.startswith(f"{metapackage_name}-hwe"):
+            if pkg.installed and apt_pkg.version_compare(pkg.installed.version, metapackage_version) > 0:
+                metapackage_name = pkg.name
+                for dependency in pkg.installed.get_dependencies("Depends"):
+                    for base_dependency in dependency.or_dependencies:
+                        if base_dependency.name.startswith(KERNEL_PACKAGE_PREFIX):
+                            latest_osrelease = re.sub(KERNEL_PACKAGE_PREFIX, "", base_dependency.name)
+                            break
+
+    if latest_osrelease is None:
+        return NagiosStatus.UNKNOWN, "failed to find installed kernel meta package {metapackage_name}[-hwe*]"
+
+    if running_osrelease != latest_osrelease:
+        message = "running kernel doesn't match the latest installed version\n\n"
+        message += f"running: {running_osrelease}\n"
+        message += f"installed: {latest_osrelease}"
+        return NagiosStatus.WARNING, message
+
+    message = "running kernel matches installed version\n\n"
+    message += f"version: {running_osrelease}"
+    return NagiosStatus.OK, message
+
+
+def check():
+    os_release = freedesktop_os_release()
+
+    if os_release["ID"] == "debian":
+        return check_debian()
+    elif os_release["ID"] == "ubuntu":
+        return check_ubuntu()
+    else:
+        return NagiosStatus.UNKNOWN, f"OS {os_release['ID']} not supported"
+
+
+def main():
+    try:
+        status, message = check()
+    except Exception as e:
+        status = NagiosStatus.UNKNOWN
+        message = f"Exception {e.__class__.__name__}\n\n{e}"
+
+    nagios_exit(status, message)
+
+
+if __name__ == "__main__":
+    main()
