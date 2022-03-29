@@ -106,7 +106,11 @@ def main() -> NoReturn:
 
     if args.low:
         for low in args.low:
-            name, warning, critical = parse_check_value(low)
+            try:
+                name, warning, critical = parse_check_value(low)
+            except ValueError:
+                nagios_exit(NagiosStatus.UNKNOWN, f"invalid format: --low {low}")
+
             if warning < critical:
                 nagios_exit(NagiosStatus.UNKNOWN, f"critical has to be <= warning in --low {name}")
             if name not in measurements:
@@ -120,7 +124,11 @@ def main() -> NoReturn:
 
     if args.high:
         for high in args.high:
-            name, warning, critical = parse_check_value(high)
+            try:
+                name, warning, critical = parse_check_value(high)
+            except ValueError:
+                nagios_exit(NagiosStatus.UNKNOWN, f"invalid format: --high {high}")
+
             if warning > critical:
                 nagios_exit(NagiosStatus.UNKNOWN, f"critical has to be >= warning in --high {name}")
             if name not in measurements:
