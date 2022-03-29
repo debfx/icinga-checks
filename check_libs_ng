@@ -28,6 +28,7 @@ import sys
 import glob
 import argparse
 import logging
+from collections import defaultdict
 
 __version__ = '0.1.0'
 
@@ -72,7 +73,7 @@ def main():
     else:
         logging.basicConfig(level=logging.WARNING)
 
-    needs_reload = dict()
+    needs_reload = defaultdict(set)
     for proc in glob.glob('/proc/[0-9]*'):  # numbers to avoid e.g. /proc/self
         exe = os.path.join(proc, 'exe')
         proc_pid = os.path.basename(proc)
@@ -89,7 +90,7 @@ def main():
                 # skip special processes spawned by the kernel (like bpfilter_umh)
                 # whose executables never exist as a file
                 if not is_parent_kthread(proc_pid):
-                    needs_reload.setdefault(proc_name, set()).add(proc_pid)
+                    needs_reload[proc_name].add(proc_pid)
         except FileNotFoundError:
             continue
 
@@ -111,7 +112,7 @@ def main():
 
             try:
                 if os.stat(map_file).st_nlink == 0:
-                    needs_reload.setdefault(proc_name, set()).add(proc_pid)
+                    needs_reload[proc_name].add(proc_pid)
                     logger.info('lib %s has been updated/deleted', real_map_file_path)
                 else:
                     logger.debug('lib %s hasn\'t been changed', real_map_file_path)
