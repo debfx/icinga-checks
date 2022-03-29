@@ -94,16 +94,24 @@ def main():
 
         try:
             exe_stat = os.stat(exe)
-            exe_target = os.path.realpath(exe)
+        except FileNotFoundError:
+            continue
 
+        try:
             # skip special processes spawned by the kernel (like bpfilter_umh)
             # whose executables never exist as a file
             is_kernel_process = is_parent_kthread(proc_pid)
-
-            if exe_stat.st_nlink == 0 and not is_kernel_process and not exe_target.startswith('/memfd:'):
-                needs_reload[proc_name].add(proc_pid)
         except FileNotFoundError:
-            continue
+            is_kernel_process = False
+
+        try:
+            exe_target = os.path.realpath(exe)
+            is_memfd = exe_target.startswith('/memfd:')
+        except OSError:
+            is_memfd = False
+
+        if exe_stat.st_nlink == 0 and not is_kernel_process and not is_memfd:
+            needs_reload[proc_name].add(proc_pid)
 
         try:
             os.chdir(os.path.join(proc, 'map_files'))
