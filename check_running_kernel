@@ -36,7 +36,7 @@ class NagiosStatus(Enum):
 
 
 def nagios_exit(status: NagiosStatus, msg: str):
-    print(f"{CHECK_NAME} {status.name} - {msg}")
+    print("{CHECK_NAME} {status_name} - {msg}".format(CHECK_NAME=CHECK_NAME, status_name=status.name, msg=msg))
     sys.exit(status.value)
 
 
@@ -77,7 +77,7 @@ def freedesktop_os_release():
         except OSError as e:
             errno = e.errno
     else:
-        raise OSError(errno, f"Unable to read files {', '.join(_os_release_candidates)}")
+        raise OSError(errno, "Unable to read files " + ", ".join(_os_release_candidates))
 
     return os_release
 
@@ -98,16 +98,28 @@ def check_debian():
     if match:
         running_version = match.group(1)
     else:
-        return NagiosStatus.UNKNOWN, f'failed to parse version from kernel version string: "{running_version_full}"'
+        return (
+            NagiosStatus.UNKNOWN,
+            'failed to parse version from kernel version string: "{running_version_full}"'.format(
+                running_version_full=running_version_full
+            ),
+        )
 
     kernel_variant = re.sub(r"^\d+\.\d+(\.\d+)?-[A-Za-z0-9\.]+-", "", running_osrelease)
     if kernel_variant == running_osrelease:
-        return NagiosStatus.UNKNOWN, f'failed to parse kernel variant from kernel osrelease: "{running_osrelease}"'
+        return (
+            NagiosStatus.UNKNOWN,
+            'failed to parse kernel variant from kernel osrelease: "{running_osrelease}"'.format(
+                running_osrelease=running_osrelease
+            ),
+        )
     metapackage_name = KERNEL_PACKAGE_PREFIX + kernel_variant
 
     cache = apt.Cache()
     if metapackage_name not in cache or not cache[metapackage_name].installed:
-        return NagiosStatus.UNKNOWN, f"kernel meta package not installed: {metapackage_name}"
+        return NagiosStatus.UNKNOWN, "kernel meta package not installed: {metapackage_name}".format(
+            metapackage_name=metapackage_name
+        )
 
     latest_osrelease = None
     latest_version = None
@@ -125,12 +137,18 @@ def check_debian():
 
     if running_osrelease != latest_osrelease or running_version != latest_version:
         message = "running kernel doesn't match the latest installed version\n\n"
-        message += f"running: {running_osrelease} - {running_version}\n"
-        message += f"installed: {latest_osrelease} - {latest_version}"
+        message += "running: {running_osrelease} - {running_version}\n".format(
+            running_osrelease=running_osrelease, running_version=running_version
+        )
+        message += "installed: {latest_osrelease} - {latest_version}".format(
+            latest_osrelease=latest_osrelease, latest_version=latest_version
+        )
         return NagiosStatus.WARNING, message
 
     message = "running kernel matches installed version\n\n"
-    message += f"version: {running_osrelease} - {running_version}"
+    message += "version: {running_osrelease} - {running_version}".format(
+        running_osrelease=running_osrelease, running_version=running_version
+    )
     return NagiosStatus.OK, message
 
 
@@ -150,7 +168,7 @@ def check_ubuntu():
 
     cache = apt.Cache()
     for pkg in cache:
-        if pkg.name == metapackage_name or pkg.name.startswith(f"{metapackage_name}-hwe"):
+        if pkg.name == metapackage_name or pkg.name.startswith(metapackage_name + "-hwe"):
             if pkg.installed and apt_pkg.version_compare(pkg.installed.version, metapackage_version) > 0:
                 metapackage_name = pkg.name
                 for dependency in pkg.installed.get_dependencies("Depends"):
@@ -164,12 +182,12 @@ def check_ubuntu():
 
     if running_osrelease != latest_osrelease:
         message = "running kernel doesn't match the latest installed version\n\n"
-        message += f"running: {running_osrelease}\n"
-        message += f"installed: {latest_osrelease}"
+        message += "running: {running_osrelease}\n".format(running_osrelease=running_osrelease)
+        message += "installed: {latest_osrelease}".format(latest_osrelease=latest_osrelease)
         return NagiosStatus.WARNING, message
 
     message = "running kernel matches installed version\n\n"
-    message += f"version: {running_osrelease}"
+    message += "version: {running_osrelease}".format(running_osrelease=running_osrelease)
     return NagiosStatus.OK, message
 
 
@@ -181,15 +199,15 @@ def check():
     elif os_release["ID"] == "ubuntu":
         return check_ubuntu()
     else:
-        return NagiosStatus.UNKNOWN, f"OS {os_release['ID']} not supported"
+        return NagiosStatus.UNKNOWN, "OS {os_release_id} not supported".format(os_release_id=os_release["ID"])
 
 
 def main():
     try:
         status, message = check()
-    except Exception as e:
+    except Exception as exc:
         status = NagiosStatus.UNKNOWN
-        message = f"Exception {e.__class__.__name__}\n\n{e}"
+        message = "Exception {exc_cls_name}\n\n{exc}".format(exc_cls_name=exc.__class__.__name__, exc=exc)
 
     nagios_exit(status, message)
 
