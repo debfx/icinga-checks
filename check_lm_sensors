@@ -35,11 +35,11 @@ def nagios_exit(
     msg: str,
     performance_data: Optional[Dict[str, float]] = None,
 ) -> NoReturn:
-    if msg:
-        lines = msg.splitlines()
-    else:
-        lines = [""]
-    status_text = f"LM_SENSORS {status.name} - {lines[0]}"
+    lines = msg.splitlines()
+
+    status_text = f"LM_SENSORS {status.name}"
+    if lines:
+        status_text += f" - {lines[0]}"
     if performance_data:
         status_text += " | "
         status_text += ", ".join([f"{name}={value}" for name, value in performance_data.items()])
