@@ -38,6 +38,24 @@ WARNING = 1
 CRITICAL = 2
 UNKNOWN = 3
 
+PF_KTHREAD = 0x00200000
+
+def parse_proc_stat(pid):
+    with open('/proc/{}/stat'.format(pid)) as f_stat:
+        stat_line = f_stat.read().strip()
+
+    return stat_line.split(' ')
+
+
+def is_parent_kthread(pid):
+    proc_stat = parse_proc_stat(pid)
+    parent_pid = int(proc_stat[3])
+    if parent_pid == 0:
+        return False
+
+    parent_proc_stat = parse_proc_stat(parent_pid)
+    return bool(int(parent_proc_stat[8]) & PF_KTHREAD)
+
 
 def main():
     argparser = argparse.ArgumentParser()
@@ -69,10 +87,13 @@ def main():
 
         try:
             exe_stat = os.stat(exe)
+            if exe_stat.st_nlink == 0:
+                # skip special processes spawned by the kernel (like bpfilter_umh)
+                # whose executables never exist as a file
+                if not is_parent_kthread(proc_pid):
+                    needs_reload.setdefault(proc_name, set()).add(proc_pid)
         except FileNotFoundError:
             continue
-        if exe_stat.st_nlink == 0:
-            needs_reload.setdefault(proc_name, set()).add(proc_pid)
 
         try:
             os.chdir(os.path.join(proc, 'map_files'))
