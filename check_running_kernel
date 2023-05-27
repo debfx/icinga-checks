@@ -133,7 +133,9 @@ def check_debian():
                 break
 
     if latest_osrelease is None or latest_version is None:
-        return NagiosStatus.UNKNOWN, "failed to find kernel image package in {metapackage_name} dependencies"
+        return NagiosStatus.UNKNOWN, "failed to find kernel image package in {metapackage_name} dependencies".format(
+            metapackage_name=metapackage_name
+        )
 
     if running_osrelease != latest_osrelease or running_version != latest_version:
         message = "running kernel doesn't match the latest installed version\n\n"
