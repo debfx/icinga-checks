@@ -139,7 +139,7 @@ def check_debian():
 
     if running_osrelease != latest_osrelease or running_version != latest_version:
         message = "running kernel doesn't match the latest installed version\n\n"
-        message += "running: {running_osrelease} - {running_version}\n".format(
+        message += "running:   {running_osrelease} - {running_version}\n".format(
             running_osrelease=running_osrelease, running_version=running_version
         )
         message += "installed: {latest_osrelease} - {latest_version}".format(
@@ -184,7 +184,7 @@ def check_ubuntu():
 
     if running_osrelease != latest_osrelease:
         message = "running kernel doesn't match the latest installed version\n\n"
-        message += "running: {running_osrelease}\n".format(running_osrelease=running_osrelease)
+        message += "running:   {running_osrelease}\n".format(running_osrelease=running_osrelease)
         message += "installed: {latest_osrelease}".format(latest_osrelease=latest_osrelease)
         return NagiosStatus.WARNING, message
 
