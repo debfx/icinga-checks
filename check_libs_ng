@@ -88,20 +88,20 @@ def main():
         try:
             with open(os.path.join(proc, 'comm')) as f:
                 proc_name = f.read().rstrip('\n')
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             continue
         logger.info('checking process %s', proc_name)
 
         try:
             exe_stat = os.stat(exe)
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             continue
 
         try:
             # skip special processes spawned by the kernel (like bpfilter_umh)
             # whose executables never exist as a file
             is_kernel_process = is_parent_kthread(proc_pid)
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             is_kernel_process = False
 
         try:
@@ -115,7 +115,7 @@ def main():
 
         try:
             os.chdir(os.path.join(proc, 'map_files'))
-        except FileNotFoundError:
+        except (FileNotFoundError, ProcessLookupError):
             continue
 
         for map_file in os.listdir('.'):
