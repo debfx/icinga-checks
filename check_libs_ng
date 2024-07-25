@@ -82,7 +82,7 @@ def main():
         logging.basicConfig(level=logging.WARNING)
 
     needs_reload = defaultdict(set)
-    for proc in glob.glob('/proc/[0-9]*'):  # numbers to avoid e.g. /proc/self
+    for proc in glob.iglob('/proc/[0-9]*'):  # numbers to avoid e.g. /proc/self
         exe = os.path.join(proc, 'exe')
         proc_pid = os.path.basename(proc)
         try:
