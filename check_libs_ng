@@ -23,11 +23,11 @@
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+import argparse
+import glob
+import logging
 import os
 import sys
-import glob
-import argparse
-import logging
 from collections import defaultdict
 
 __version__ = '0.1.0'
@@ -40,7 +40,7 @@ UNKNOWN = 3
 PF_KTHREAD = 0x00200000
 
 def parse_proc_stat(pid):
-    with open('/proc/{}/stat'.format(pid)) as f_stat:
+    with open(f'/proc/{pid}/stat') as f_stat:
         stat_line = f_stat.read().strip()
 
     # the second field (comm) can contain spaces but is wrapped in parentheses
@@ -155,5 +155,5 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as e:
-        print('LIBS UNKNOWN - Exception {}: {}'.format(type(e).__name__, e))
+        print(f'LIBS UNKNOWN - Exception {type(e).__name__}: {e}')
         exit(UNKNOWN)

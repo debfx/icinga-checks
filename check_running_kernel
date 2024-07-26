@@ -17,12 +17,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import apt
-import apt_pkg
 import re
 import sys
 from enum import Enum
 
+import apt
+import apt_pkg
 
 CHECK_NAME = "RUNNING KERNEL"
 KERNEL_PACKAGE_PREFIX = "linux-image-"
@@ -36,7 +36,7 @@ class NagiosStatus(Enum):
 
 
 def nagios_exit(status: NagiosStatus, msg: str):
-    print("{CHECK_NAME} {status_name} - {msg}".format(CHECK_NAME=CHECK_NAME, status_name=status.name, msg=msg))
+    print(f"{CHECK_NAME} {status.name} - {msg}")
     sys.exit(status.value)
 
 
@@ -100,26 +100,20 @@ def check_debian():
     else:
         return (
             NagiosStatus.UNKNOWN,
-            'failed to parse version from kernel version string: "{running_version_full}"'.format(
-                running_version_full=running_version_full
-            ),
+            f'failed to parse version from kernel version string: "{running_version_full}"',
         )
 
     kernel_variant = re.sub(r"^\d+\.\d+(\.\d+)?-[A-Za-z0-9\.]+-", "", running_osrelease)
     if kernel_variant == running_osrelease:
         return (
             NagiosStatus.UNKNOWN,
-            'failed to parse kernel variant from kernel osrelease: "{running_osrelease}"'.format(
-                running_osrelease=running_osrelease
-            ),
+            f'failed to parse kernel variant from kernel osrelease: "{running_osrelease}"',
         )
     metapackage_name = KERNEL_PACKAGE_PREFIX + kernel_variant
 
     cache = apt.Cache()
     if metapackage_name not in cache or not cache[metapackage_name].installed:
-        return NagiosStatus.UNKNOWN, "kernel meta package not installed: {metapackage_name}".format(
-            metapackage_name=metapackage_name
-        )
+        return NagiosStatus.UNKNOWN, f"kernel meta package not installed: {metapackage_name}"
 
     latest_osrelease = None
     latest_version = None
@@ -133,24 +127,16 @@ def check_debian():
                 break
 
     if latest_osrelease is None or latest_version is None:
-        return NagiosStatus.UNKNOWN, "failed to find kernel image package in {metapackage_name} dependencies".format(
-            metapackage_name=metapackage_name
-        )
+        return NagiosStatus.UNKNOWN, f"failed to find kernel image package in {metapackage_name} dependencies"
 
     if running_osrelease != latest_osrelease or running_version != latest_version:
         message = "running kernel doesn't match the latest installed version\n\n"
-        message += "running:   {running_osrelease} - {running_version}\n".format(
-            running_osrelease=running_osrelease, running_version=running_version
-        )
-        message += "installed: {latest_osrelease} - {latest_version}".format(
-            latest_osrelease=latest_osrelease, latest_version=latest_version
-        )
+        message += f"running:   {running_osrelease} - {running_version}\n"
+        message += f"installed: {latest_osrelease} - {latest_version}"
         return NagiosStatus.WARNING, message
 
     message = "running kernel matches installed version\n\n"
-    message += "version: {running_osrelease} - {running_version}".format(
-        running_osrelease=running_osrelease, running_version=running_version
-    )
+    message += f"version: {running_osrelease} - {running_version}"
     return NagiosStatus.OK, message
 
 
@@ -184,12 +170,12 @@ def check_ubuntu():
 
     if running_osrelease != latest_osrelease:
         message = "running kernel doesn't match the latest installed version\n\n"
-        message += "running:   {running_osrelease}\n".format(running_osrelease=running_osrelease)
-        message += "installed: {latest_osrelease}".format(latest_osrelease=latest_osrelease)
+        message += f"running:   {running_osrelease}\n"
+        message += f"installed: {latest_osrelease}"
         return NagiosStatus.WARNING, message
 
     message = "running kernel matches installed version\n\n"
-    message += "version: {running_osrelease}".format(running_osrelease=running_osrelease)
+    message += f"version: {running_osrelease}"
     return NagiosStatus.OK, message
 
 
@@ -209,7 +195,7 @@ def main():
         status, message = check()
     except Exception as exc:
         status = NagiosStatus.UNKNOWN
-        message = "Exception {exc_cls_name}\n\n{exc}".format(exc_cls_name=exc.__class__.__name__, exc=exc)
+        message = f"Exception {exc.__class__.__name__}\n\n{exc}"
 
     nagios_exit(status, message)
 

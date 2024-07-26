@@ -23,6 +23,7 @@ import re
 import subprocess
 import sys
 
+
 def nagios_ok(msg):
     print("MEMORY OK - " + msg)
     sys.exit(0)

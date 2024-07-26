@@ -20,7 +20,7 @@ import json
 import subprocess
 import sys
 from enum import Enum
-from typing import Dict, NoReturn, Optional, Tuple
+from typing import NoReturn, Optional
 
 
 class NagiosStatus(Enum):
@@ -33,7 +33,7 @@ class NagiosStatus(Enum):
 def nagios_exit(
     status: NagiosStatus,
     msg: str,
-    performance_data: Optional[Dict[str, float]] = None,
+    performance_data: Optional[dict[str, float]] = None,
 ) -> NoReturn:
     lines = msg.splitlines()
 
@@ -50,7 +50,7 @@ def nagios_exit(
     sys.exit(status.value)
 
 
-def read_sensors() -> Dict[str, float]:
+def read_sensors() -> dict[str, float]:
     proc = subprocess.run(["sensors", "-j", "-A"], capture_output=True, text=True, check=True)
     data = json.loads(proc.stdout)
     result = {}
@@ -66,7 +66,7 @@ def read_sensors() -> Dict[str, float]:
     return result
 
 
-def parse_check_value(check_value: str) -> Tuple[str, float, float]:
+def parse_check_value(check_value: str) -> tuple[str, float, float]:
     name, threshold = check_value.split("=", maxsplit=1)
     warning, critical = threshold.split(",", maxsplit=1)
     return name, float(warning), float(critical)

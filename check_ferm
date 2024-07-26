@@ -53,7 +53,7 @@ def get_policy(table, data):
             continue
 
         if in_filter:
-            match = re.search(r'^:{} ([A-Z]+)'.format(re.escape(table)), line)
+            match = re.search(rf'^:{re.escape(table)} ([A-Z]+)', line)
             if match:
                 return match.group(1)
 
@@ -74,20 +74,20 @@ except subprocess.CalledProcessError:
     print("FERM UNKNOWN - unable to get active rules")
     sys.exit(3)
 
-policy = {}
-policy["IPv4 INPUT"] = get_policy("INPUT", loaded_ip)
-policy["IPv4 FORWARD"] = get_policy("FORWARD", loaded_ip)
-policy["IPv6 INPUT"] = get_policy("INPUT", loaded_ip6)
-policy["IPv6 FORWARD"] = get_policy("FORWARD", loaded_ip6)
+policies = {}
+policies["IPv4 INPUT"] = get_policy("INPUT", loaded_ip)
+policies["IPv4 FORWARD"] = get_policy("FORWARD", loaded_ip)
+policies["IPv6 INPUT"] = get_policy("INPUT", loaded_ip6)
+policies["IPv6 FORWARD"] = get_policy("FORWARD", loaded_ip6)
 
-for descr, policy in policy.items():
+for descr, policy in policies.items():
     if policy == "DROP":
         continue
     elif policy == "UNKNOWN":
-        print("FERM UNKNOWN - policy for {} is unknown".format(descr))
+        print(f"FERM UNKNOWN - policy for {descr} is unknown")
         sys.exit(3)
     else:
-        print("FERM WARNING - policy for {} is {}".format(descr, policy))
+        print(f"FERM WARNING - policy for {descr} is {policy}")
         sys.exit(1)
 
 count_loaded_ip = count_rules(loaded_ip)
@@ -112,5 +112,5 @@ if count_ferm_ip6 == 0:
     print("FERM WARNING - no IPv6 rules configured")
     sys.exit(1)
 
-print("FERM OK - {} IPv4 and {} IPv6 rules active".format(count_loaded_ip, count_loaded_ip6))
+print(f"FERM OK - {count_loaded_ip} IPv4 and {count_loaded_ip6} IPv6 rules active")
 sys.exit(0)

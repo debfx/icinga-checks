@@ -15,11 +15,13 @@
 #
 # ------------------------------------------------------------------
 
-import apparmor.common
 import os
 import os.path
 import re
 import sys
+
+import apparmor.common
+
 
 def errormsg(msg):
     print('APPARMOR UNKNOWN - ' + msg)
@@ -38,7 +40,7 @@ def matchliteral(aa_regexp, literal):
     match = False
     try:
         match = re.search(p_regexp, literal)
-    except:
+    except re.error:
         return None
     return match
 
@@ -87,14 +89,14 @@ def get_processes(profiles):
     for filename in contents:
         if filename.isdigit():
             try:
-                for p in open("/proc/%s/attr/current" % filename).readlines():
+                for p in open(f"/proc/{filename}/attr/current").readlines():
                     match = re.search("^([^\(]+)\s+\((\w+)\)$", p)
                     if match:
                         processes[filename] = { 'profile' : match.group(1), \
                                                 'mode' : match.group(2) }
                     else:
-                        cmdline = open("/proc/%s/cmdline" % filename).read()
-                        profile = get_profile(os.path.realpath("/proc/%s/exe" % filename), cmdline, profiles)
+                        cmdline = open(f"/proc/{filename}/cmdline").read()
+                        profile = get_profile(os.path.realpath(f"/proc/{filename}/exe"), cmdline, profiles)
                         if profile:
                             processes[filename] = { 'profile' : profile, \
                                                     'mode' : 'unconfined' }
@@ -116,9 +118,9 @@ filtered_processes = filter_processes(processes, "unconfined")
 num_unconfined = len(filtered_processes)
 
 if num_unconfined != 0:
-    print('APPARMOR WARNING - {} process(es) are unconfined but have a profile defined'.format(num_unconfined))
+    print(f'APPARMOR WARNING - {num_unconfined} process(es) are unconfined but have a profile defined')
     for proc in filtered_processes:
-        print('{} ({})'.format(proc[1], proc[0]))
+        print(f'{proc[1]} ({proc[0]})')
     sys.exit(1)
 else:
     print('APPARMOR OK - 0 processes are unconfined but have a profile defined')

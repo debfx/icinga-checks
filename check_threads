@@ -43,13 +43,13 @@ for pid in os.listdir('/proc/'):
 
     pidentry = {}
 
-    cmdline = open(path + 'cmdline', 'r').read()
+    cmdline = open(path + 'cmdline').read()
 
     stat = os.stat(path)
     pidentry['uid'] = stat.st_uid
     pidentry['gid'] = stat.st_gid
 
-    for line in open(path + 'status', 'r'):
+    for line in open(path + 'status'):
         if line.startswith('Threads:'):
             pidentry['threads'] = int(line[9:])
 
@@ -77,7 +77,7 @@ for p in pids:
     if uid and p['uid'] != uid:
         continue
 
-    if args.argument and not (args.argument in p['cmdline']):
+    if args.argument and args.argument not in p['cmdline']:
         continue
 
     if args.command and p['exe'] != args.command:
@@ -89,11 +89,11 @@ for p in pids:
     num_threads += p['threads']
 
 if args.critical and num_threads >= args.critical:
-    print('THREADS CRITICAL - {} threads'.format(num_threads))
+    print(f'THREADS CRITICAL - {num_threads} threads')
     sys.exit(2)
 elif args.warning and num_threads >= args.warning:
-    print('THREADS WARNING - {} threads'.format(num_threads))
+    print(f'THREADS WARNING - {num_threads} threads')
     sys.exit(1)
 else:
-    print('THREADS OK - {} threads'.format(num_threads))
+    print(f'THREADS OK - {num_threads} threads')
     sys.exit(0)

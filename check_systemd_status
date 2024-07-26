@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 from enum import Enum
-from typing import Dict, List, NoReturn, Tuple
+from typing import NoReturn
 
 
 class NagiosStatus(Enum):
@@ -40,7 +40,7 @@ def nagios_exit(status: NagiosStatus, msg: str) -> NoReturn:
     sys.exit(status.value)
 
 
-def run_process(cmd: List[str]) -> Tuple[int, str]:
+def run_process(cmd: list[str]) -> tuple[int, str]:
     try:
         output = subprocess.check_output(cmd, universal_newlines=True, stderr=subprocess.STDOUT)
         return (0, output.strip())
@@ -48,7 +48,7 @@ def run_process(cmd: List[str]) -> Tuple[int, str]:
         return (e.returncode, e.output.strip())
 
 
-def check_systemd_status() -> Tuple[NagiosStatus, str]:
+def check_systemd_status() -> tuple[NagiosStatus, str]:
     system_running_result = run_process(["systemctl", "is-system-running"])
 
     status = NagiosStatus.UNKNOWN
@@ -67,7 +67,7 @@ def check_systemd_status() -> Tuple[NagiosStatus, str]:
     return status, message
 
 
-def parse_properties(lines: List[str]) -> Dict[str, str]:
+def parse_properties(lines: list[str]) -> dict[str, str]:
     properties = {}
 
     for line in lines:
@@ -78,7 +78,7 @@ def parse_properties(lines: List[str]) -> Dict[str, str]:
     return properties
 
 
-def check_service_status(unit: str, check_running: bool) -> Tuple[NagiosStatus, str]:
+def check_service_status(unit: str, check_running: bool) -> tuple[NagiosStatus, str]:
     unit_state_result = run_process(["systemctl", "show", "-p", "ActiveState,SubState", unit])
     properties = parse_properties(unit_state_result[1].splitlines())
     status = NagiosStatus.UNKNOWN
