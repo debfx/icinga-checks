@@ -1,0 +1,18 @@
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+extend-select = ["E", "F", "W", "B", "I", "RUF", "UP"]
+
+[tool.mypy]
+python_version = "3.9"
+
+[[tool.mypy.overrides]]
+module = [
+  "apparmor",
+  "apparmor.common",
+  "apt",
+  "apt_pkg",
+]
+ignore_missing_imports = true
