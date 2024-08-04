@@ -24,25 +24,27 @@ import apparmor.common
 
 
 def errormsg(msg):
-    print('APPARMOR UNKNOWN - ' + msg)
+    print("APPARMOR UNKNOWN - " + msg)
     sys.exit(3)
 
+
 def find_apparmorfs():
-    '''Finds AppArmor mount point'''
+    """Finds AppArmor mount point"""
     for p in open("/proc/mounts").readlines():
-        if p.split()[2] == "securityfs" and \
-           os.path.exists(os.path.join(p.split()[1], "apparmor")):
+        if p.split()[2] == "securityfs" and os.path.exists(os.path.join(p.split()[1], "apparmor")):
             return os.path.join(p.split()[1], "apparmor")
     return False
 
+
 def matchliteral(aa_regexp, literal):
-    p_regexp = '^' + apparmor.common.convert_regexp(aa_regexp) + '$'
+    p_regexp = "^" + apparmor.common.convert_regexp(aa_regexp) + "$"
     match = False
     try:
         match = re.search(p_regexp, literal)
     except re.error:
         return None
     return match
+
 
 def get_profile(exe, cmdline, profiles):
     for profile in profiles:
@@ -51,7 +53,14 @@ def get_profile(exe, cmdline, profiles):
 
     # check for scripts run by an interpreter
     args = cmdline.split("\0")
-    if len(args) >= 2 and args[0] in ("/bin/sh", "/bin/bash", "/usr/bin/perl", "/usr/bin/python", "/usr/bin/python3", "/usr/bin/php"):
+    if len(args) >= 2 and args[0] in (
+        "/bin/sh",
+        "/bin/bash",
+        "/usr/bin/perl",
+        "/usr/bin/python",
+        "/usr/bin/python3",
+        "/usr/bin/php",
+    ):
         for arg in args[1:]:
             if arg.startswith("/") and os.path.exists(arg):
                 for profile in profiles:
@@ -60,8 +69,9 @@ def get_profile(exe, cmdline, profiles):
 
     return None
 
+
 def get_profiles():
-    '''Fetch loaded profiles'''
+    """Fetch loaded profiles"""
 
     profiles = {}
 
@@ -82,8 +92,9 @@ def get_profiles():
 
     return profiles
 
+
 def get_processes(profiles):
-    '''Fetch process list'''
+    """Fetch process list"""
     processes = {}
     contents = os.listdir("/proc")
     for filename in contents:
@@ -92,25 +103,25 @@ def get_processes(profiles):
                 for p in open(f"/proc/{filename}/attr/current").readlines():
                     match = re.search("^([^\(]+)\s+\((\w+)\)$", p)
                     if match:
-                        processes[filename] = { 'profile' : match.group(1), \
-                                                'mode' : match.group(2) }
+                        processes[filename] = {"profile": match.group(1), "mode": match.group(2)}
                     else:
                         cmdline = open(f"/proc/{filename}/cmdline").read()
                         profile = get_profile(os.path.realpath(f"/proc/{filename}/exe"), cmdline, profiles)
                         if profile:
-                            processes[filename] = { 'profile' : profile, \
-                                                    'mode' : 'unconfined' }
+                            processes[filename] = {"profile": profile, "mode": "unconfined"}
             except FileNotFoundError:
                 pass
     return processes
 
+
 def filter_processes(processes, status):
-    '''Return a list of processes that have a particular status'''
+    """Return a list of processes that have a particular status"""
     filtered = []
     for key, value in list(processes.items()):
-        if value['mode'] == status:
-            filtered.append([key, value['profile']])
+        if value["mode"] == status:
+            filtered.append([key, value["profile"]])
     return filtered
+
 
 profiles = get_profiles()
 processes = get_processes(profiles)
@@ -118,10 +129,10 @@ filtered_processes = filter_processes(processes, "unconfined")
 num_unconfined = len(filtered_processes)
 
 if num_unconfined != 0:
-    print(f'APPARMOR WARNING - {num_unconfined} process(es) are unconfined but have a profile defined')
+    print(f"APPARMOR WARNING - {num_unconfined} process(es) are unconfined but have a profile defined")
     for proc in filtered_processes:
-        print(f'{proc[1]} ({proc[0]})')
+        print(f"{proc[1]} ({proc[0]})")
     sys.exit(1)
 else:
-    print('APPARMOR OK - 0 processes are unconfined but have a profile defined')
+    print("APPARMOR OK - 0 processes are unconfined but have a profile defined")
     sys.exit(0)

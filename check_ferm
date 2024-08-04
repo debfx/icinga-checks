@@ -26,15 +26,17 @@ import sys
 
 FERM_CONFIG = "/etc/ferm/ferm.conf"
 
+
 def get_ferm_rules(config, domain):
-    return subprocess.check_output(["ferm", "--noexec", "--shell", "--domain", domain, config],
-                                   universal_newlines=True)
+    return subprocess.check_output(["ferm", "--noexec", "--shell", "--domain", domain, config], universal_newlines=True)
+
 
 def get_iptables_rules(domain):
     if domain == "ip":
         return subprocess.check_output(["iptables-save"], universal_newlines=True)
     else:
         return subprocess.check_output(["ip6tables-save"], universal_newlines=True)
+
 
 def count_rules(data):
     counter = 0
@@ -45,6 +47,7 @@ def count_rules(data):
 
     return counter
 
+
 def get_policy(table, data):
     in_filter = False
     for line in data.splitlines():
@@ -53,7 +56,7 @@ def get_policy(table, data):
             continue
 
         if in_filter:
-            match = re.search(rf'^:{re.escape(table)} ([A-Z]+)', line)
+            match = re.search(rf"^:{re.escape(table)} ([A-Z]+)", line)
             if match:
                 return match.group(1)
 

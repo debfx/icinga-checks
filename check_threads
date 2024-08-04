@@ -23,41 +23,41 @@ import os.path
 import pwd
 import sys
 
-parser = argparse.ArgumentParser(description='Check the number of running threads.')
-parser.add_argument('-w', '--warning', dest='warning', type=int)
-parser.add_argument('-c', '--critical', dest='critical', type=int)
-parser.add_argument('-u', '--user', dest='user')
-parser.add_argument('-a', '--argument-array', dest='argument')
-parser.add_argument('-C', '--command', dest='command')
-parser.add_argument('-k', '--no-kthreads', dest='kernelthreads', action='store_false')
+parser = argparse.ArgumentParser(description="Check the number of running threads.")
+parser.add_argument("-w", "--warning", dest="warning", type=int)
+parser.add_argument("-c", "--critical", dest="critical", type=int)
+parser.add_argument("-u", "--user", dest="user")
+parser.add_argument("-a", "--argument-array", dest="argument")
+parser.add_argument("-C", "--command", dest="command")
+parser.add_argument("-k", "--no-kthreads", dest="kernelthreads", action="store_false")
 
 args = parser.parse_args()
 
 pids = []
 
-for pid in os.listdir('/proc/'):
-    path = '/proc/' + pid + '/'
+for pid in os.listdir("/proc/"):
+    path = "/proc/" + pid + "/"
 
     if not pid.isdigit() or not os.path.isdir(path):
         continue
 
     pidentry = {}
 
-    cmdline = open(path + 'cmdline').read()
+    cmdline = open(path + "cmdline").read()
 
     stat = os.stat(path)
-    pidentry['uid'] = stat.st_uid
-    pidentry['gid'] = stat.st_gid
+    pidentry["uid"] = stat.st_uid
+    pidentry["gid"] = stat.st_gid
 
-    for line in open(path + 'status'):
-        if line.startswith('Threads:'):
-            pidentry['threads'] = int(line[9:])
+    for line in open(path + "status"):
+        if line.startswith("Threads:"):
+            pidentry["threads"] = int(line[9:])
 
-    pidentry['cmdline'] = cmdline.strip('\x00').replace('\x00', " ")
-    pidentry['kernel'] = (not cmdline)
+    pidentry["cmdline"] = cmdline.strip("\x00").replace("\x00", " ")
+    pidentry["kernel"] = not cmdline
     try:
-        pidentry['exe'] = os.readlink(path + 'exe')
-    #except PermissionError: python > 3.2
+        pidentry["exe"] = os.readlink(path + "exe")
+    # except PermissionError: python > 3.2
     except OSError:
         pass
 
@@ -74,26 +74,26 @@ else:
 num_threads = 0
 
 for p in pids:
-    if uid and p['uid'] != uid:
+    if uid and p["uid"] != uid:
         continue
 
-    if args.argument and args.argument not in p['cmdline']:
+    if args.argument and args.argument not in p["cmdline"]:
         continue
 
-    if args.command and p['exe'] != args.command:
+    if args.command and p["exe"] != args.command:
         continue
 
-    if not args.kernelthreads and p['kernel']:
+    if not args.kernelthreads and p["kernel"]:
         continue
 
-    num_threads += p['threads']
+    num_threads += p["threads"]
 
 if args.critical and num_threads >= args.critical:
-    print(f'THREADS CRITICAL - {num_threads} threads')
+    print(f"THREADS CRITICAL - {num_threads} threads")
     sys.exit(2)
 elif args.warning and num_threads >= args.warning:
-    print(f'THREADS WARNING - {num_threads} threads')
+    print(f"THREADS WARNING - {num_threads} threads")
     sys.exit(1)
 else:
-    print(f'THREADS OK - {num_threads} threads')
+    print(f"THREADS OK - {num_threads} threads")
     sys.exit(0)

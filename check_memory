@@ -28,17 +28,21 @@ def nagios_ok(msg):
     print("MEMORY OK - " + msg)
     sys.exit(0)
 
+
 def nagios_warning(msg):
     print("MEMORY WARNING - " + msg)
     sys.exit(1)
+
 
 def nagios_critical(msg):
     print("MEMORY CRITICAL - " + msg)
     sys.exit(2)
 
+
 def nagios_unknown(msg):
     print("MEMORY UNKONWN - " + msg)
     sys.exit(3)
+
 
 def parse_meminfo():
     result = {}
@@ -56,6 +60,7 @@ def parse_meminfo():
             continue
 
     return result
+
 
 def parse_free():
     result = {}
@@ -77,6 +82,7 @@ def parse_free():
 
     return result
 
+
 def get_threshold(string, memory_total):
     if not string:
         return None
@@ -88,14 +94,21 @@ def get_threshold(string, memory_total):
     else:
         raise ValueError()
 
+
 def main():
     parser = argparse.ArgumentParser(description="Nagios/Icinga plugin for checking memory usage.")
     parser.add_argument("--warning", "-w", help="Warning threshold (in bytes or percent) for free memory.")
     parser.add_argument("--critical", "-c", help="Critical threshold (in bytes or percent) for free memory.")
-    parser.add_argument("--unit", "-u",
-                        choices=["b", "K", "M", "G"],
-                        default="M",
-                        help="Unit to use for human-redeable output. Can be 'b', 'K' 'M' or 'G' for bytes, KiB, MiB or GiB respectively")
+    parser.add_argument(
+        "--unit",
+        "-u",
+        choices=["b", "K", "M", "G"],
+        default="M",
+        help=(
+            "Unit to use for human-redeable output. "
+            "Can be 'b', 'K' 'M' or 'G' for bytes, KiB, MiB or GiB respectively"
+        ),
+    )
     args = parser.parse_args()
 
     meminfo = parse_meminfo()
@@ -141,6 +154,7 @@ def main():
         nagios_warning(status_line)
     else:
         nagios_ok(status_line)
+
 
 if __name__ == "__main__":
     main()
