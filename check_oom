@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+
+# Nagios/Icinga plugin for checking OOM killer events.
+#
+# Copyright (C) Felix Geyer <debfx@fobos.de>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 or (at your option)
+# version 3 of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
+import enum
+import os
+import subprocess
+import sys
+
+CHECK_NAME = "OOM"
+PRINT_NUM_OOM = 10
+
+
+class NagiosStatus(enum.Enum):
+    OK = 0
+    WARNING = 1
+    CRITICAL = 2
+    UNKNOWN = 3
+
+
+def nagios_exit(status: NagiosStatus, msg: str) -> None:
+    print(f"{CHECK_NAME} {status.name} - {msg}")
+    sys.exit(status.value)
+
+
+def check_journal(hours: int) -> tuple[NagiosStatus, str]:
+    # journalctl returns exit code 1 and outputs "-- No entries --" when no log entries are found
+    env = dict(os.environ)
+    env["LC_ALL"] = "C.UTF-8"
+    proc = subprocess.run(
+        ["journalctl", "--dmesg", "--since", f"-{hours}h", "--grep", "out of memory.*: killed process"],
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    if proc.returncode != 0 and not (proc.returncode == 1 and "-- No entries --" in proc.stdout):
+        return (
+            NagiosStatus.UNKNOWN,
+            f"failed to fetch journal\n\n{proc.stderr}",
+        )
+
+    oom_lines = proc.stdout.strip("\n").splitlines()
+    num_oom = len(oom_lines)
+    if num_oom == 0 or proc.returncode == 1:
+        return (
+            NagiosStatus.OK,
+            f"No OOM killed process within the last {hours} h",
+        )
+    else:
+        output = "\n".join(oom_lines[:PRINT_NUM_OOM])
+        if num_oom > PRINT_NUM_OOM:
+            output += "\n[...]"
+        return (
+            NagiosStatus.CRITICAL,
+            f"{num_oom} OOM killed processes within the last {hours} h\n\n{output}",
+        )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Nagios/Icinga plugin for checking OOM killer events.")
+    parser.add_argument("--hours", help="Check for OOM killer events within the last X hours.", default=24, type=int)
+    args = parser.parse_args()
+
+    try:
+        status, message = check_journal(args.hours)
+    except Exception as exc:
+        status = NagiosStatus.UNKNOWN
+        message = f"Exception {exc.__class__.__name__}\n\n{exc}"
+
+    nagios_exit(status, message)
+
+
+if __name__ == "__main__":
+    main()
