@@ -103,7 +103,7 @@ def check_debian():
             f'failed to parse version from kernel version string: "{running_version_full}"',
         )
 
-    kernel_variant = re.sub(r"^\d+\.\d+(\.\d+)?(-[A-Za-z0-9\.]+)?-", "", running_osrelease)
+    kernel_variant = re.sub(r"^\d+\.\d+(\.[a-z0-9+]+)?(-[A-Za-z0-9\.]+)?-", "", running_osrelease)
     if kernel_variant == running_osrelease:
         return (
             NagiosStatus.UNKNOWN,
